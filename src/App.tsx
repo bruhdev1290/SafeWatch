@@ -1,6 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Search, Upload, MapPin, Star, Settings, Play, Pause, Volume2, VolumeX, Users, AlertCircle, Eye, Grid3x3, Filter, Clock, Bell } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Camera, Search, Upload, MapPin, Star, Settings, Volume2, VolumeX, Users, AlertCircle, Eye, Grid3x3, Clock, Bell } from 'lucide-react';
 import * as Tone from 'tone';
+
+// Types
+interface Camera {
+  id: number;
+  name: string;
+  state: string;
+  city: string;
+  lat: number;
+  lon: number;
+  stream: string;
+  active: boolean;
+  lastSeen: Date | null;
+}
+
+interface SearchResult {
+  cameraId: number;
+  timestamp: Date;
+  confidence: number;
+  match: string;
+}
 
 // Mock camera data - replace with real API
 const mockCameras = [
@@ -16,7 +36,7 @@ const mockCameras = [
 
 // UI Sound System
 const SoundSystem = {
-  synth: null,
+  synth: null as Tone.Synth | null,
   enabled: true,
   
   init: async () => {
@@ -38,69 +58,69 @@ const SoundSystem = {
   click: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
-    SoundSystem.synth.triggerAttackRelease('C5', '0.05');
+    SoundSystem.synth?.triggerAttackRelease('C5', '0.05');
   },
   
   hover: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
-    SoundSystem.synth.triggerAttackRelease('E5', '0.03');
+    SoundSystem.synth?.triggerAttackRelease('E5', '0.03');
   },
   
   select: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
     const now = Tone.now();
-    SoundSystem.synth.triggerAttackRelease('C5', '0.1', now);
-    SoundSystem.synth.triggerAttackRelease('E5', '0.1', now + 0.05);
+    SoundSystem.synth?.triggerAttackRelease('C5', '0.1', now);
+    SoundSystem.synth?.triggerAttackRelease('E5', '0.1', now + 0.05);
   },
   
   alert: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
     const now = Tone.now();
-    SoundSystem.synth.triggerAttackRelease('A4', '0.1', now);
-    SoundSystem.synth.triggerAttackRelease('A4', '0.1', now + 0.15);
-    SoundSystem.synth.triggerAttackRelease('A4', '0.1', now + 0.3);
+    SoundSystem.synth?.triggerAttackRelease('A4', '0.1', now);
+    SoundSystem.synth?.triggerAttackRelease('A4', '0.1', now + 0.15);
+    SoundSystem.synth?.triggerAttackRelease('A4', '0.1', now + 0.3);
   },
   
   success: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
     const now = Tone.now();
-    SoundSystem.synth.triggerAttackRelease('C5', '0.1', now);
-    SoundSystem.synth.triggerAttackRelease('E5', '0.1', now + 0.08);
-    SoundSystem.synth.triggerAttackRelease('G5', '0.15', now + 0.16);
+    SoundSystem.synth?.triggerAttackRelease('C5', '0.1', now);
+    SoundSystem.synth?.triggerAttackRelease('E5', '0.1', now + 0.08);
+    SoundSystem.synth?.triggerAttackRelease('G5', '0.15', now + 0.16);
   },
   
   toggle: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
-    SoundSystem.synth.triggerAttackRelease('G4', '0.08');
+    SoundSystem.synth?.triggerAttackRelease('G4', '0.08');
   },
   
   notification: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
     const now = Tone.now();
-    SoundSystem.synth.triggerAttackRelease('E5', '0.1', now);
-    SoundSystem.synth.triggerAttackRelease('C5', '0.15', now + 0.1);
+    SoundSystem.synth?.triggerAttackRelease('E5', '0.1', now);
+    SoundSystem.synth?.triggerAttackRelease('C5', '0.15', now + 0.1);
   },
   
   error: async () => {
     if (!SoundSystem.enabled) return;
     await SoundSystem.init();
     const now = Tone.now();
-    SoundSystem.synth.triggerAttackRelease('D4', '0.15', now);
-    SoundSystem.synth.triggerAttackRelease('C4', '0.2', now + 0.1);
+    SoundSystem.synth?.triggerAttackRelease('D4', '0.15', now);
+    SoundSystem.synth?.triggerAttackRelease('C4', '0.2', now + 0.1);
   }
 };
 
 const App = () => {
   const [view, setView] = useState('grid');
-  const [cameras, setCameras] = useState(mockCameras);
-  const [favorites, setFavorites] = useState([]);
-  const [selectedCamera, setSelectedCamera] = useState(null);
+  const [cameras] = useState<Camera[]>(mockCameras);
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState('all');
   const [showSettings, setShowSettings] = useState(false);
@@ -108,14 +128,12 @@ const App = () => {
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
-  const [activeAlerts, setActiveAlerts] = useState([]);
-  const [searchImage, setSearchImage] = useState(null);
+  const [searchImage, setSearchImage] = useState<string | null>(null);
   const [searchDescription, setSearchDescription] = useState('');
   const [aiSearching, setAiSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [uiSoundsEnabled, setUiSoundsEnabled] = useState(true);
-  const audioRef = useRef(null);
 
   useEffect(() => {
     SoundSystem.enabled = uiSoundsEnabled;
@@ -128,7 +146,7 @@ const App = () => {
     }
   }, []);
 
-  const toggleFavorite = (cameraId) => {
+  const toggleFavorite = (cameraId: number) => {
     const newFavorites = favorites.includes(cameraId)
       ? favorites.filter(id => id !== cameraId)
       : [...favorites, cameraId];
@@ -147,12 +165,12 @@ const App = () => {
     SoundSystem.click();
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSearchImage(reader.result);
+        setSearchImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -320,6 +338,7 @@ const App = () => {
                 <div className="space-y-2">
                   {searchResults.map((result, idx) => {
                     const camera = cameras.find(c => c.id === result.cameraId);
+                    if (!camera) return null;
                     return (
                       <div
                         key={idx}
@@ -342,7 +361,7 @@ const App = () => {
                         <div className="text-right">
                           <div className="flex items-center gap-2 text-green-400 font-medium">
                             <Clock className="w-4 h-4" />
-                            {Math.floor((Date.now() - result.timestamp) / 60000)} min ago
+                            {Math.floor((Date.now() - result.timestamp.getTime()) / 60000)} min ago
                           </div>
                           <p className="text-sm text-gray-400">Confidence: {(result.confidence * 100).toFixed(0)}%</p>
                         </div>
